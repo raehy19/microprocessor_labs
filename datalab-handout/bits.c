@@ -191,7 +191,13 @@ int bitNor(int x, int y) {
  *   Rating: 2
  */
 int getByte(int x, int n) {
-	return 2;
+//	(n << 3) == (n * 2^3) == (n * 8)
+//		: 1byte == 8bit, so need to bit shift 8 times per n
+//	(x >> (n << 3))
+//		: shift target 1byte(8bit) to lsb
+//	(x >> (n << 3) & 0b11111111)
+//		: use & operator with 0b11111111, to remove 3byte(24bit) from msb
+	return (x >> (n << 3) & 0b11111111);
 }
 
 /*
