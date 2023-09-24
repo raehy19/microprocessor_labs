@@ -1,7 +1,7 @@
 /* 
  * CS:APP Data Lab 
  * 
- * <Please put your name and userid here>
+ * < Raehyeon Jeong 2020142218 >
  * 
  * bits.c - Source file with your solutions to the Lab.
  *          This is the file you will hand in to your instructor.
@@ -170,7 +170,26 @@ NOTES:
    - 285 hentaigana
    - 3 additional Zanabazar Square characters */
 
-/* 
+//for debug :
+//int a;
+//int b;
+//printBits(sizeof(a), &a);
+//printBits(sizeof(b), &b);
+void printBits(int const size, void const *const ptr) {
+	unsigned char *b = (unsigned char *)ptr;
+	unsigned char byte;
+	int i, j;
+
+	for (i = size - 1; i >= 0; i--) {
+		for (j = 7; j >= 0; j--) {
+			byte = (b[i] >> j) & 1;
+			printf("%u", byte);
+		}
+	}
+	printf("\n");
+}
+
+/*
  * bitNor - ~(x|y) using only ~ and & 
  *   Example: bitNor(0x6, 0x5) = 0xFFFFFFF8
  *   Legal ops: ~ &
@@ -211,7 +230,18 @@ int getByte(int x, int n) {
  *   Rating: 3
  */
 int bitMask(int highbit, int lowbit) {
-	return 2;
+//	BIT_MAX == 0b11111111111111111111111111111111 == -1
+	const int BIT_MAX = ~0;
+
+//	((2 << highbit) + BIT_MAX)
+//		: mask bit 1 : highbit ~ lsb
+//	(1 << lowbit) + BIT_MAX
+//		: mask bit 1 : (lowbit - 1) ~ lsb
+//	~((1 << lowbit) + BIT_MAX)
+//		: mask bit 1 : msb ~ lowbit
+//	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
+//		: get bit mask with & operation
+	return (((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX));
 }
 
 /*
