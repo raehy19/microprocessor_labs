@@ -511,7 +511,62 @@ unsigned floatAbsVal(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-	return 2;
+	/*
+	 * 	SIGN
+	 * 		= (uf >> 31) & 1
+	 * 			: value of MSB
+	 * 	EXPONENT
+	 * 		= ((uf >> 23) & 0xFF) - 127
+	 * 			: (uf >> 23) & 0xFF
+	 * 				=> get value of exponent bits
+	 * 			: - 127
+	 * 				=> subtract bias
+	 * 	FRACTION
+	 * 		= (uf & 0x007FFFFF) | 0x00800000
+	 * 			: (uf & 0x007FFFFF)
+	 * 				=> get value of fraction bits
+	 * 			: | 0x00800000
+	 * 				=> add implied leading number
+	 * 	EXP_INT
+	 * 		= EXPONENT - 23
+	 * 			: exponent value for shift to int only
+	 *
+	 * 	if (EXPONENT > 31)
+	 * 		: exponent is too large for an integer,
+	 * 		  return (0x80000000u);
+	 * 	if (EXPONENT < 0)
+	 * 		: exponent is too small for an integer,
+	 * 		  return (0);
+	 * 	else
+	 * 		if (EXPONENT > 23)
+	 * 			 : need to execute left shift to get only int value
+	 * 		else
+	 * 			 : need to execute right shift to get only int value
+	 * 	if (SIGN)
+	 * 		: need to compute two's complement if number is negative
+	 */
+	const int SIGN = (uf >> 31) & 1;
+	const int EXPONENT = ((uf >> 23) & 0xFF) - 127;
+	const int FRACTION = (uf & 0x007FFFFF) | 0x00800000;
+	const int EXP_INT = EXPONENT - 23;
+	int ret;
+
+	if (EXPONENT > 31) {
+		return (0x80000000u);
+	} else if (EXPONENT < 0) {
+		return (0);
+	} else {
+		if (EXPONENT > 23) {
+			ret = FRACTION << (EXP_INT);
+		} else {
+			ret = FRACTION >> (-EXP_INT);
+		}
+		if (SIGN) {
+			return ((~ret) + 1);
+		} else {
+			return (ret);
+		}
+	}
 }
 
 /*
