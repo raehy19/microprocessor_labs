@@ -483,7 +483,19 @@ int signMag2TwosComp(int x) {
  *   Rating: 2
  */
 unsigned floatAbsVal(unsigned uf) {
-	return 2;
+	/*
+	 * 	Check NaN
+	 * 		NaN : EXPONENT are all 1's, FRACTION != 0
+	 * 		if NAN, return argument (uf)
+	 * 	Compute ABS
+	 * 		To change MSB to 0, execute BIT_AND(&) with 0x7FFFFFFF
+	 */
+	const unsigned EXPONENT = uf & 0x7F800000;
+	const unsigned FRACTION = uf & 0x007FFFFF;
+
+	if (EXPONENT == 0x7F800000 && FRACTION)
+		return (uf);
+	return (uf & (0x7FFFFFFF));
 }
 
 /*
