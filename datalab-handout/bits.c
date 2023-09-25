@@ -305,7 +305,16 @@ int bitParity(int x) {
  *   Rating: 1
  */
 int tmax(void) {
-	return 2;
+	/*
+	 * 	Maximum two's complement integer in binary:
+	 * 		0b01111111111111111111111111111111
+	 * 	(1 << 31) ==
+	 * 		0b10000000000000000000000000000000
+	 * 	~(1 << 31) ==
+	 * 		0b01111111111111111111111111111111
+	 * 		== Maximum two's complement integer
+	 */
+	return (~(1 << 31));
 }
 
 /*
