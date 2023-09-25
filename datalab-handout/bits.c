@@ -325,7 +325,16 @@ int tmax(void) {
  *   Rating: 2
  */
 int isNegative(int x) {
-	return 2;
+	/*
+	 * 	Signbit of integer is MSB
+	 * 		if MSB == 1, negative integer
+	 * 		if MSB == 0, positive integer
+	 * 	So, value of MSB is the return value of isNegative
+	 * 	To get only MSB value :
+	 * 		execute shift right(>>) 31 times,
+	 * 		then execute AND(&) operation with 1
+	 */
+	return ((x >> 31) & 1);
 }
 
 /*
