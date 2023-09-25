@@ -170,25 +170,6 @@ NOTES:
    - 285 hentaigana
    - 3 additional Zanabazar Square characters */
 
-//for debug :
-//int a;
-//int b;
-//printBits(sizeof(a), &a);
-//printBits(sizeof(b), &b);
-void printBits(int const size, void const *const ptr) {
-	unsigned char *b = (unsigned char *)ptr;
-	unsigned char byte;
-	int i, j;
-
-	for (i = size - 1; i >= 0; i--) {
-		for (j = 7; j >= 0; j--) {
-			byte = (b[i] >> j) & 1;
-			printf("%u", byte);
-		}
-	}
-	printf("\n");
-}
-
 /*
  * bitNor - ~(x|y) using only ~ and & 
  *   Example: bitNor(0x6, 0x5) = 0xFFFFFFF8
@@ -197,7 +178,9 @@ void printBits(int const size, void const *const ptr) {
  *   Rating: 1
  */
 int bitNor(int x, int y) {
-//	(~(x | y)) == (~x & ~y)
+	/*
+	 * 	(~(x | y)) == (~x & ~y)
+	 */
 	return (~x & ~y);
 }
 
@@ -210,13 +193,17 @@ int bitNor(int x, int y) {
  *   Rating: 2
  */
 int getByte(int x, int n) {
-//	(n << 3) == (n * 2^3) == (n * 8)
-//		: 1byte == 8bit, so need to bit shift 8 times per n
-//	(x >> (n << 3))
-//		: shift target 1byte(8bit) to lsb
-//	(x >> (n << 3) & 0b11111111)
-//		: use & operator with 0b11111111, to remove 3byte(24bit) from msb
-	return (x >> (n << 3) & 0b11111111);
+	/*
+	 * 	(n << 3) == (n * 2^3) == (n * 8)
+	 * 		: 1byte == 8bit, so need to bit shift 8 times per n
+	 * 	(x >> (n << 3))
+	 * 		: shift target 1byte(8bit) to LSB
+	 * 	(x >> (n << 3) & 0xFF)
+	 * 		: use & operator with 0xFF, to remove 3byte(24bit) from MSB
+	 * 		  == get only 8 bit from LSB
+	 * 		  ( 0xFF == 0b00000000000000000000000011111111 )
+	 */
+	return (x >> (n << 3) & 0xFF);
 }
 
 /*
@@ -230,17 +217,20 @@ int getByte(int x, int n) {
  *   Rating: 3
  */
 int bitMask(int highbit, int lowbit) {
-//	BIT_MAX == 0b11111111111111111111111111111111 == -1
+	/*
+	 * 	BIT_MAX == 0b11111111111111111111111111111111 == -1
+	 *
+	 * 	(2 << highbit) + BIT_MAX == (2 << highbit) - 1
+	 * 		: mask bit to 1 : highbit ~ LSB
+	 * 	(1 << lowbit) + BIT_MAX == (1 << lowbit) - 1
+	 * 		: mask bit to 1 : (lowbit - 1)bit ~ LSB
+	 * 	~((1 << lowbit) + BIT_MAX)
+	 * 		: mask bit 1 : MSB ~ lowbit
+	 * 	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
+	 * 		: get bit mask with & operation
+	 */
 	const int BIT_MAX = ~0;
 
-//	((2 << highbit) + BIT_MAX)
-//		: mask bit 1 : highbit ~ lsb
-//	(1 << lowbit) + BIT_MAX
-//		: mask bit 1 : (lowbit - 1) ~ lsb
-//	~((1 << lowbit) + BIT_MAX)
-//		: mask bit 1 : msb ~ lowbit
-//	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
-//		: get bit mask with & operation
 	return (((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX));
 }
 
@@ -252,7 +242,30 @@ int bitMask(int highbit, int lowbit) {
  *   Rating: 4 
  */
 int bang(int x) {
-	return 2;
+	/*
+	 * 	if x == 0
+	 * 		: x == 0, ~x == 0xFFFFFF, ~x + 1 == 0
+	 * 		  so, ((~x + 1) | x)'s MSB == 0
+	 * 	if x > 0
+	 * 		:  x > 0, x's MSB == 0
+	 * 		  ~x < 0, ~x + 1 < 0 (cause ~x + 1 == 0 only if x = 0),
+	 * 		          (~x + 1)`s MSB == 1
+	 * 		  so, ((~x + 1) | x)'s MSB == 1
+	 * 	if x < 0
+	 * 		: x < 0, x's MSB == 1
+	 * 		  so, ((~x + 1) | x)'s MSB == 1
+	 *
+	 * 	((~x + 1) | x) >> 31 + 1
+	 * 		: Machine performs right shifts arithmetically, so if
+	 * 		  x == 0, ((~x + 1) | x) >> 31 == 0x00000000
+	 * 		          ((~x + 1) | x) >> 31 + 1 == 0x00000000 + 1
+	 * 		                                   == 1
+	 * 		  x != 0, ((~x + 1) | x) >> 31 == 0xFFFFFFFF
+	 * 		          ((~x + 1) | x) >> 31 + 1 == 0xFFFFFFFF + 1
+	 * 		                                   == 0x00000000
+	 * 		                                   == 0
+	 */
+	return ((((~x + 1) | x) >> 31) + 1);
 }
 
 /*
