@@ -347,7 +347,22 @@ int isNegative(int x) {
  *   Rating: 2
  */
 int fitsBits(int x, int n) {
-	return 2;
+	/*
+	 * 	For input integer x,
+	 * 	execute shift left(<<) for (32 - n) bit,
+	 * 	then execute shift right(>>) for (32 - n) bit
+	 * 		this makes only n bit from LSB is valid
+	 * 		(32 - n) == 32 + (~n + 1) == 33 + ~n
+	 * 	Then compare original value and shifted value with XOR(^) operation
+	 * 		if XOR result == 0,
+	 * 			x can be represented as an n-bit, two's complement integer
+	 * 		if XOR result != 0,
+	 * 			x can't be represented as an n-bit, two's complement integer
+	 * 	For expected the result, execute Not(!) operation with XOR result
+	 */
+	const int SHIFT = 33 + (~n);
+
+	return !(x ^ ((x << SHIFT) >> SHIFT));
 }
 
 /*
