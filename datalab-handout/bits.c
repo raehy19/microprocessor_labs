@@ -227,7 +227,7 @@ int bitMask(int highbit, int lowbit) {
 	 * 	~((1 << lowbit) + BIT_MAX)
 	 * 		: mask bit 1 : MSB ~ lowbit
 	 * 	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
-	 * 		: get bit mask with & operation
+	 * 		: get bit mask by AND(&) operation
 	 */
 	const int BIT_MAX = ~0;
 
@@ -276,7 +276,26 @@ int bang(int x) {
  *   Rating: 4
  */
 int bitParity(int x) {
-	return 2;
+	/*
+	 * 	With XOR(^) operation, for two calculated bit
+	 * 		if there are odd number of 0's => return 1
+	 * 		if there are even number of 0's => return 0
+	 * 	So execute XOR operation for every bit by shifting right :
+	 * 		16bit from LSB
+	 * 		8bit from LSB
+	 * 		4bit from LSB
+	 * 		2bit from LSB
+	 * 		1bit from LSB
+	 * 	Then, the value of LSB is the result of bitParity
+	 * 	To get only LSB value, execute AND(&) operation with 1
+	 */
+	x ^= (x >> 16);
+	x ^= (x >> 8);
+	x ^= (x >> 4);
+	x ^= (x >> 2);
+	x ^= (x >> 1);
+
+	return (x & 1);
 }
 
 /*
