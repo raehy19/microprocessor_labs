@@ -428,7 +428,19 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int ezThreeFourths(int x) {
-	return 2;
+	/*
+	 * 	Multiply x by 3
+	 * 		MUL_3 = x + (x << 1)
+	 * 			== x + x * 2 == x * 3
+	 * 	Divide MUL_3 by 4, rounding toward 0
+	 * 		execute same operations of dividePower2
+	 * 		(previous implemented function),
+	 * 		which is n == 2
+	 * 		(2^2 == 4)
+	 */
+	const int MUL_3 = x + (x << 1);
+
+	return ((MUL_3 + ((MUL_3 >> 31) & ((1 << 2) + ~0))) >> 2);
 }
 
 /*
