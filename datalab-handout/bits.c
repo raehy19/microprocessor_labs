@@ -452,7 +452,23 @@ int ezThreeFourths(int x) {
  *   Rating: 4
  */
 int signMag2TwosComp(int x) {
-	return 2;
+	/*
+	 * 	Only need to convert when x is negative => sign bit == 1
+	 * 	Two's complement of x:
+	 * 			make sign bit of x (MSB) to 0,
+	 * 			then compute ~x + 1
+	 * 	SIGN_MASK
+	 * 		If x is positive, SIGN_MASK == 0x0
+	 * 		If x is negative, SIGN_MASK == 0xFFFFFFFF
+	 * 	Compute Two's complement when x is negative
+	 * 		x &= ~(1 << 31)
+	 * 			: make sign bit of x (MSB) to 0
+	 * 		~x == x ^ 0xFFFFFFFF
+	 * 		 1 == 0xFFFFFFFF & 1
+	 */
+	const int SIGN_MASK = x >> 31;
+	x &= ~(1 << 31);
+	return ((x ^ SIGN_MASK) + (SIGN_MASK & 1));
 }
 
 /*
