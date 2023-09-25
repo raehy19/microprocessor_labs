@@ -227,7 +227,7 @@ int bitMask(int highbit, int lowbit) {
 	 * 	~((1 << lowbit) + BIT_MAX)
 	 * 		: mask bit 1 : MSB ~ lowbit
 	 * 	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
-	 * 		: get bit mask by AND(&) operation
+	 * 		: get bit mask by executing AND(&) operation
 	 */
 	const int BIT_MAX = ~0;
 
@@ -243,15 +243,15 @@ int bitMask(int highbit, int lowbit) {
  */
 int bang(int x) {
 	/*
-	 * 	if x == 0
+	 * 	If x == 0
 	 * 		: x == 0, ~x == 0xFFFFFF, ~x + 1 == 0
 	 * 		  so, ((~x + 1) | x)'s MSB == 0
-	 * 	if x > 0
+	 * 	If x > 0
 	 * 		:  x > 0, x's MSB == 0
 	 * 		  ~x < 0, ~x + 1 < 0 (cause ~x + 1 == 0 only if x = 0),
 	 * 		          (~x + 1)`s MSB == 1
 	 * 		  so, ((~x + 1) | x)'s MSB == 1
-	 * 	if x < 0
+	 * 	If x < 0
 	 * 		: x < 0, x's MSB == 1
 	 * 		  so, ((~x + 1) | x)'s MSB == 1
 	 *
@@ -374,7 +374,20 @@ int fitsBits(int x, int n) {
  *   Rating: 2
  */
 int dividePower2(int x, int n) {
-	return 2;
+	/*
+	 * 	If x is positive, to compute x/(2^n), round toward zero,
+	 * 		execute shift right(>>) operation on x by n
+	 * 	If x is negative, to compute x/(2^n), round toward zero,
+	 * 		execute shift right(>>) operation on x by n,
+	 * 		but it round toward INT_MIN, not zero
+	 * 			(because of Machine performs right shifts arithmetically)
+	 * 		To correct this error,
+	 * 			add (2^n - 1) to x, before executing shift right(>>) operation
+	 * 	Correction value : ((x >> 31) & ((1 << n) + ~0))
+	 * 		(x >> 31) : check if x negative, by sign bit (MSB)
+	 * 		((1 << n) + ~0) : correction value, 2^n -1
+	 */
+	return ((x + ((x >> 31) & ((1 << n) + ~0))) >> n);
 }
 
 /*
