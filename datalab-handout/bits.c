@@ -227,7 +227,7 @@ int bitMask(int highbit, int lowbit) {
 	 * 	~((1 << lowbit) + BIT_MAX)
 	 * 		: mask bit 1 : MSB ~ lowbit
 	 * 	((2 << highbit) + BIT_MAX) & ~((1 << lowbit) + BIT_MAX)
-	 * 		: get bit mask by executing AND(&) operation
+	 * 		: get bit mask by executing BITWISE_AND(&) operation
 	 */
 	const int BIT_MAX = ~0;
 
@@ -287,7 +287,7 @@ int bitParity(int x) {
 	 * 		2bit from LSB
 	 * 		1bit from LSB
 	 * 	Then, the value of LSB is the result of bitParity
-	 * 	To get only LSB value, execute AND(&) operation with 1
+	 * 	To get only LSB value, execute BITWISE_AND(&) operation with 1
 	 */
 	x ^= (x >> 16);
 	x ^= (x >> 8);
@@ -331,8 +331,8 @@ int isNegative(int x) {
 	 * 		if MSB == 0, positive integer
 	 * 	So, value of MSB is the return value of isNegative
 	 * 	To get only MSB value :
-	 * 		execute shift right(>>) 31 times,
-	 * 		then execute AND(&) operation with 1
+	 * 		execute Shift Right(>>) 31 times,
+	 * 		then execute BITWISE_AND(&) operation with 1
 	 */
 	return ((x >> 31) & 1);
 }
@@ -349,8 +349,8 @@ int isNegative(int x) {
 int fitsBits(int x, int n) {
 	/*
 	 * 	For input integer x,
-	 * 	execute shift left(<<) for (32 - n) bit,
-	 * 	then execute shift right(>>) for (32 - n) bit
+	 * 	execute Shift Left(<<) for (32 - n) bit,
+	 * 	then execute Shift Right(>>) for (32 - n) bit
 	 * 		this makes only n bit from LSB is valid
 	 * 		(32 - n) == 32 + (~n + 1) == 33 + ~n
 	 * 	Then compare original value and shifted value with XOR(^) operation
@@ -376,13 +376,13 @@ int fitsBits(int x, int n) {
 int dividePower2(int x, int n) {
 	/*
 	 * 	If x is positive, to compute x/(2^n), round toward zero,
-	 * 		execute shift right(>>) operation on x by n
+	 * 		execute Shift Right(>>) operation on x by n
 	 * 	If x is negative, to compute x/(2^n), round toward zero,
-	 * 		execute shift right(>>) operation on x by n,
+	 * 		execute Shift Right(>>) operation on x by n,
 	 * 		but it round toward INT_MIN, not zero
 	 * 			(because of Machine performs right shifts arithmetically)
 	 * 		To correct this error,
-	 * 			add (2^n - 1) to x, before executing shift right(>>) operation
+	 * 			add (2^n - 1) to x, before executing Shift Right(>>) operation
 	 * 	Correction value : ((x >> 31) & ((1 << n) + ~0))
 	 * 		(x >> 31) : check if x negative, by sign bit (MSB)
 	 * 		((1 << n) + ~0) : correction value, 2^n -1
@@ -398,7 +398,22 @@ int dividePower2(int x, int n) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-	return 2;
+	/*
+	 * 	To determine results, to condition x,
+	 * 		execute two NOT(!) operation
+	 * 			If condition is false, (!!x) == 0
+	 * 			If condition is true, (!!x) == 1
+	 * 	CONDITION_MASK
+	 * 		If condition is false, CONDITION_MASK
+	 * 			== (!!x) + ~0 == 0 - 1 == 0xFFFFFFFF
+	 * 		If condition is true, CONDITION_MASK
+	 * 			== (!!x) + ~0 == 1 - 1 == 0
+	 * 	Execute BITWISE_AND(&) with CONDITION_MASK,
+	 * 	then execute BITWISE_OR(|) for both results
+	 */
+	const int CONDITION_MASK = (!!x) + ~0;
+
+	return ((y & ~CONDITION_MASK) | (z & CONDITION_MASK));
 }
 
 /*
