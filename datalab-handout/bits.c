@@ -467,6 +467,7 @@ int signMag2TwosComp(int x) {
 	 * 		 1 == 0xFFFFFFFF & 1
 	 */
 	const int SIGN_MASK = x >> 31;
+
 	x &= ~(1 << 31);
 	return ((x ^ SIGN_MASK) + (SIGN_MASK & 1));
 }
@@ -581,5 +582,49 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatScale4(unsigned uf) {
-	return 2;
+	/*
+	 * 	SIGN
+	 * 		: sign bit
+	 * 	if (exponent == 0xFF)
+	 * 		: check NaN, infinity
+	 * 	if (exponent)
+	 * 		: check normalized number
+	 * 			++exponent,
+	 * 			if (exponent == 0xFF)
+	 * 				: check overflow
+	 * 					if overflow occurs during doubling,
+	 * 					set fraction to zero and break loop early
+	 * 	else
+	 * 		: check denormalized number
+	 * 			fraction <<= 1
+	 * 				=> double fraction
+	 * 			if (fraction & 0x00800000)
+	 * 				: check if normalization occurs
+	 * 	(SIGN | (exponent << 23) | fraction)
+	 * 		combine values
+	 */
+	const unsigned SIGN = (uf & 0x80000000);
+	unsigned exponent = ((uf >> 23) & 0xFF);
+	unsigned fraction = (uf & 0x007FFFFF);
+	int i = -1;
+
+	if (exponent == 0xFF)
+		return (uf);
+
+	while (++i < 2) {
+		if (exponent) {
+			++exponent;
+			if (exponent == 0xFF) {
+				fraction = 0;
+				break;
+			}
+		} else {
+			fraction <<= 1;
+			if (fraction & 0x00800000) {
+				fraction &= 0x007FFFFF;
+				exponent = 1;
+			}
+		}
+	}
+	return (SIGN | (exponent << 23) | fraction);
 }
