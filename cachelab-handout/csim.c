@@ -14,20 +14,25 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
 
 typedef struct s_line {
-	int valid;        // valid bit
-	int tag;          // tag bits
-	int timestamp;    // time
+	int valid;                     // valid bit
+	int tag;                       // tag bits
+	unsigned long long timestamp;  // last accessed time
 }t_line;
 
 typedef struct s_cache_info {
-	int num_of_set_index_bits;  // Number of set index bits (s)
-	int num_of_set;             // Number of set (S)
-	int line_per_set;           // Number of lines per set (E)
-	int num_of_block_bits;      // Number of block bits (b)
-	int block_size;             // Block size (B)
-	t_line **lines;             // Cache lines
+	int num_of_set_index_bits;   // Number of set index bits (s)
+	int num_of_set;              // Number of set (S)
+	int line_per_set;            // Number of lines per set (E)
+	int num_of_block_bits;       // Number of block bits (b)
+	int block_size;              // Block size (B)
+	int hits;                    // Cache hits
+	int misses;                  // Cache misses
+	int evictions;               // Cache evictions
+	unsigned long long time_tic; // time ticker
+	t_line **lines;              // Cache lines
 }t_cache;
 
 int help(int ret_val) {
@@ -38,6 +43,11 @@ int help(int ret_val) {
 void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	unsigned long long selected_set_idx;
 	unsigned long long tag;
+	unsigned long long min_timestamp;
+	int replace_line_idx;
+
+	// Increase time tic
+	++cache->time_tic;
 
 	// Calculate Set index to select
 	// 1. Shift left by (tag bits)
@@ -50,13 +60,70 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	// Shift right by (set index bits + block bits)
 	tag = mem_addr >> (cache->num_of_set_index_bits + cache->num_of_block_bits);
 
-	printf("set idx : %lld, tag : %lld\n", selected_set_idx, tag);
+
+//	printf("set idx : %lld, tag : %lld\n", selected_set_idx, tag);
+
+	// Find data in Cache
+	for (int i = 0; i < cache->line_per_set; ++i) {
+
+		// Cache Hit
+		if (cache->lines[selected_set_idx][i].valid &&
+			cache->lines[selected_set_idx][i].tag == tag) {
+
+			// Increase Hit count
+			++cache->hits;
+
+			// Update last access time
+			cache->lines[selected_set_idx][i].timestamp = cache->time_tic;
+			return;
+		}
+	}
+
+	// Cache Miss
+	// Increase Miss count
+	++cache->misses;
+
+
+	// Find empty line
+	replace_line_idx = 0;
+	for (int i = 0; i < cache->line_per_set; ++i) {
+		if (!cache->lines[selected_set_idx][i].valid)
+			replace_line_idx = i;
+	}
+
+	// If empty line found, update data
+	if (!cache->lines[selected_set_idx][replace_line_idx].valid) {
+		cache->lines[selected_set_idx][replace_line_idx].valid = 1;
+		cache->lines[selected_set_idx][replace_line_idx].tag = tag;
+		cache->lines[selected_set_idx][replace_line_idx].timestamp = cache->time_tic;
+		return;
+	}
+
+	// If there is no empty line
+	replace_line_idx = 0;
+	min_timestamp = ULLONG_MAX;
+
+	// Find Least Recently Used line
+	for (int i = 0; i < cache->line_per_set; ++i) {
+		if (cache->lines[selected_set_idx][i].timestamp < min_timestamp) {
+			replace_line_idx = i;
+			min_timestamp = cache->lines[selected_set_idx][i].timestamp;
+		}
+	}
+
+	// Cache Eviction
+	++cache->evictions;
+
+	// Update data
+	cache->lines[selected_set_idx][replace_line_idx].valid = 1;
+	cache->lines[selected_set_idx][replace_line_idx].tag = tag;
+	cache->lines[selected_set_idx][replace_line_idx].timestamp = cache->time_tic;
 }
 
 int main(int argc, char **argv) {
 	int opt;
 	FILE *f = 0;
-	t_cache cache = (t_cache){0, 0, 0, 0, 0, NULL};
+	t_cache cache = (t_cache){0, 0, 0, 0, 0, 0, 0, 0, 0, NULL};
 
 	// Parse command line argument
 	while ((opt = getopt(argc, argv, "s:E:b:t:h")) != EOF) {
@@ -121,11 +188,12 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	printf("%d %d %d\n", cache.num_of_set_index_bits, cache.line_per_set, cache.num_of_block_bits
-	);
+//	printf("%d %d %d\n", cache.num_of_set_index_bits, cache.line_per_set,
+//		   cache.num_of_block_bits
+//	);
 
 
-	printSummary(0, 0, 0);
+	printSummary(cache.hits, cache.misses, cache.evictions);
 
 	// close file
 	fclose(f);
