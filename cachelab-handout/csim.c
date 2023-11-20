@@ -5,10 +5,12 @@
 /* ************************************************************************** */
 
 /*
- * csim.c -
- *
+ * csim.c - cache simulation program
+ *   used getopt function to parse command line argument
+ *   used dynamic allocated 2d array for cache lines
+ *   used fscanf function to read tracefile
+ *   used time tic increase and timestamp for every cache access for LRU
  */
-
 
 #include "cachelab.h"
 #include <getopt.h>
@@ -16,13 +18,19 @@
 #include <stdlib.h>
 #include <limits.h>
 
+/*
+ * Struct that contains line(Cache Block) info
+ */
 typedef struct s_line {
 	int valid;                     // valid bit
 	int tag;                       // tag bits
 	unsigned long long timestamp;  // last accessed time
 }t_line;
 
-typedef struct s_cache_info {
+/*
+ * Struct that contains cache info
+ */
+typedef struct s_cache {
 	int num_of_set_index_bits;   // Number of set index bits (s)
 	int num_of_set;              // Number of set (S)
 	int line_per_set;            // Number of lines per set (E)
@@ -35,16 +43,24 @@ typedef struct s_cache_info {
 	t_line **lines;              // Cache lines
 }t_cache;
 
+/*
+ * Function that print help message
+ * Input Params : ret_val == return value
+ * Output Param : None
+ */
 int help(int ret_val) {
 	printf("Usage: ./csim [-hv] -s <num> -E <num> -b <num> -t <file>\n");
 	return (ret_val);
 }
 
+/*
+ * Function that simulate Cache Access
+ * Input Params : cache == cache info structure, mem_addr == memory address to access
+ * Output Param : None
+ */
 void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	unsigned long long selected_set_idx;
 	unsigned long long tag;
-	unsigned long long min_timestamp;
-	int replace_line_idx;
 
 	// Increase time tic
 	++cache->time_tic;
@@ -59,9 +75,6 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	// Calculate tag
 	// Shift right by (set index bits + block bits)
 	tag = mem_addr >> (cache->num_of_set_index_bits + cache->num_of_block_bits);
-
-
-//	printf("set idx : %lld, tag : %lld\n", selected_set_idx, tag);
 
 	// Find data in Cache
 	for (int i = 0; i < cache->line_per_set; ++i) {
@@ -79,13 +92,13 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 		}
 	}
 
-	// Cache Miss
+	// Cache Miss occurred
 	// Increase Miss count
 	++cache->misses;
 
-
 	// Find empty line
-	replace_line_idx = 0;
+	int replace_line_idx = 0;
+
 	for (int i = 0; i < cache->line_per_set; ++i) {
 		if (!cache->lines[selected_set_idx][i].valid)
 			replace_line_idx = i;
@@ -100,8 +113,8 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	}
 
 	// If there is no empty line
+	unsigned long long min_timestamp = ULLONG_MAX;
 	replace_line_idx = 0;
-	min_timestamp = ULLONG_MAX;
 
 	// Find Least Recently Used line
 	for (int i = 0; i < cache->line_per_set; ++i) {
@@ -111,7 +124,7 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 		}
 	}
 
-	// Cache Eviction
+	// Cache Eviction occurred
 	++cache->evictions;
 
 	// Update data
@@ -120,6 +133,11 @@ void access_cache(t_cache *cache, unsigned long long mem_addr) {
 	cache->lines[selected_set_idx][replace_line_idx].timestamp = cache->time_tic;
 }
 
+/*
+ * Main function of program that simulate cache access with command line argument and trace file
+ * Input Params : information about Cache, trace file
+ * Output Param : exit code
+ */
 int main(int argc, char **argv) {
 	int opt;
 	FILE *f = 0;
@@ -148,6 +166,8 @@ int main(int argc, char **argv) {
 				return (help(1));
 		}
 	}
+
+	// Check command line argument
 	if (!cache.num_of_set_index_bits || !cache.line_per_set || !cache.num_of_block_bits || !f) {
 		printf("./csim: Missing required command line argument\n");
 		return (help(1));
@@ -163,6 +183,7 @@ int main(int argc, char **argv) {
 		*((cache.lines) + i) = (t_line *)calloc(cache.line_per_set, sizeof(t_line));
 	}
 
+	// Read trace file
 	char command;
 	unsigned long long mem_addr;
 	int bsize;
@@ -170,15 +191,18 @@ int main(int argc, char **argv) {
 	while (fscanf(f, " %c %llx,%d", &command, &mem_addr, &bsize) != EOF) {
 		switch (command) {
 			case 'L': {
+				// Load data
 				access_cache(&cache, mem_addr);
 				break;
 			}
 			case 'M': {
+				// Modify data (access cache twice)
 				access_cache(&cache, mem_addr);
 				access_cache(&cache, mem_addr);
 				break;
 			}
 			case 'S': {
+				// Store data
 				access_cache(&cache, mem_addr);
 				break;
 			}
@@ -188,14 +212,16 @@ int main(int argc, char **argv) {
 		}
 	}
 
-//	printf("%d %d %d\n", cache.num_of_set_index_bits, cache.line_per_set,
-//		   cache.num_of_block_bits
-//	);
-
-
+	// Print hit, miss, eviction count
 	printSummary(cache.hits, cache.misses, cache.evictions);
 
-	// close file
+	// Free allocated memory
+	for (int i = 0; i < cache.num_of_set; ++i) {
+		free(*((cache.lines) + i));
+	}
+	free(cache.lines);
+
+	// Close file
 	fclose(f);
 
 	return (0);
