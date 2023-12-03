@@ -183,8 +183,9 @@ int main(int argc, char **argv) {
  * when we type ctrl-c (ctrl-z) at the keyboard.  
 */
 void eval(char *cmdline) {
-	char *argv[MAXARGS];  // char ** param to store input command
-	int is_bg;            // int param to check if command should run background
+	char *argv[MAXARGS];  // char ** type variable : to store input command
+	int is_bg;            // int type variable     : to check if command should run background
+	pid_t pid;            // pid_t type variable   : to store pid value from fork() function call
 
 	// Parse cmdline and check if command should run background
 	is_bg = parseline(cmdline, argv);
@@ -194,16 +195,38 @@ void eval(char *cmdline) {
 		return;
 	}
 
-	// Debug print
-	printf("%d\n", is_bg);
-	for (int i = 0; *(argv + i); i++) {
-		printf("%s\n", *(argv + i));
-	}
+//	// Debug print
+//	printf("%d\n", is_bg);
+//	for (int i = 0; *(argv + i); i++) {
+//		printf("%s\n", *(argv + i));
+//	}
 
 	// Execute and return if command is builtin function
 	if (builtin_cmd(argv))
 		return;
 
+	// Execute command background
+	if (is_bg) {
+
+		return;
+	}
+
+	// Execute command foreground
+	// Child process
+	if ((pid = fork()) == 0) {
+		// execute command
+		if (execve(argv[0], argv, environ) < 0) {
+			printf("%s : Command not found\n", argv[0]);
+			exit(0);
+		}
+	}
+		// Parent process
+	else if (pid > 0) {
+		int status;
+
+		waitpid(pid, &status, 0);
+	} else { ;
+	}
 	return;
 }
 
