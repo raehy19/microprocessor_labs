@@ -203,8 +203,12 @@ void eval(char *cmdline) {
 	if (builtin_cmd(argv))
 		return;
 
+	// Set full sigset
+	if (sigfillset(&set_full)) {
+		printf("eval : sigfillset failed\n");
+	}
+
 	// Block signal to avoid race condition on job list
-	sigfillset(&set_full);
 	if (sigprocmask(SIG_BLOCK, &set_full, &old_set)) {
 		printf("eval : sigprocmask block all failed\n");
 	}
@@ -227,7 +231,7 @@ void eval(char *cmdline) {
 		if (execve(argv[0], argv, environ) < 0) {
 
 			// If fail, print and exit
-			printf("%s : Command not found\n", argv[0]);
+			printf("%s: Command not found\n", argv[0]);
 			exit(0);
 		}
 	}
@@ -237,7 +241,8 @@ void eval(char *cmdline) {
 		if (is_bg) {
 
 			// Add job to job list
-			addjob(jobs, pid, BG, cmdline);
+			if (!addjob(jobs, pid, BG, cmdline))
+				return;
 
 			// Restore signal set
 			if (sigprocmask(SIG_SETMASK, &old_set, NULL)) {
@@ -252,7 +257,8 @@ void eval(char *cmdline) {
 		else {
 
 			// Add job to job list
-			addjob(jobs, pid, FG, cmdline);
+			if (!addjob(jobs, pid, FG, cmdline))
+				return;
 
 			// Restore signal set
 			if (sigprocmask(SIG_SETMASK, &old_set, NULL)) {
@@ -349,8 +355,72 @@ int builtin_cmd(char **argv) {
  * do_bgfg - Execute the builtin bg and fg commands
  */
 void do_bgfg(char **argv) {
-	// Todo : bgfg
-	printf("fgbg\n");
+	struct job_t *job;
+	int jid;
+	pid_t pid;
+
+	// Initialize variables
+	jid = 0;
+	pid = 0;
+
+	// If there is no second argument
+	if (!argv[1]) {
+		printf("%s command requires PID or %%jobid argument\n", argv[0]);
+		return;
+	}
+
+	// Check if job id or pid
+	// job id : argument start with %
+	if (argv[1][0] == '%') {
+		jid = atoi(&argv[1][1]);
+		job = getjobjid(jobs, jid);
+	}
+		// pid : argument start with number
+	else if (('0' <= argv[1][0]) && ('9' >= argv[1][0])) {
+		pid = (pid_t)(atoi(argv[1]));
+		job = getjobpid(jobs, pid);
+	}
+		// wrong argument
+	else {
+		printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+		return;
+	}
+
+	// Error handling
+	if (!job) {
+		if (pid)
+			printf("(%d): No such process\n", pid);
+		else
+			printf("%%%d: No such job\n", jid);
+		return;
+	}
+
+	// 'bg' built-in command
+	if (!strncmp(argv[0], "bg", 2)) {
+
+		// Set job state
+		job->state = BG;
+
+		// Print job info
+		printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
+	}
+		// 'fg' built-in command
+	else {
+
+		// Set job state
+		job->state = FG;
+	}
+
+	// Send SIGCONT signal
+	if (kill((job->pid), SIGCONT)) {
+		printf("kill function failed.\n");
+	}
+
+	// If fg, wait for the process terminate
+	if (!strncmp(argv[0], "fg", 2)) {
+		waitfg(job->pid);
+	}
+
 	return;
 }
 
@@ -390,7 +460,9 @@ void sigchld_handler(int sig) {
 	struct job_t *job;   // job_t type variable    : to delete or stop, print info
 
 	// Set full sigset
-	sigfillset(&set_full);
+	if (sigfillset(&set_full)) {
+		printf("sigchld handler : sigfillset failed\n");
+	}
 
 	// Backup errno
 	old_errno = errno;
@@ -412,7 +484,9 @@ void sigchld_handler(int sig) {
 			}
 
 			// Delete job
-			deletejob(jobs, pid);
+			if (!deletejob(jobs, pid)) {
+				printf("sigchld handler : delete job failed\n");
+			}
 
 			// Restore signal
 			if (sigprocmask(SIG_SETMASK, &old_set, NULL)) {
