@@ -286,13 +286,14 @@ static void *find_best_fit(size_t size) {
 
 	// Search for the best fit block
 	while (GET_SIZE(CURR_HDRP(block_p))) {
-//		printf("best fit : block_p : %p\n", block_p);
-//		printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
-//		printf("size : %d\n", GET_SIZE(CURR_HDRP(block_p)));
-//
+
 		// If the block is free and its size is larger than or equal to size
 		if (!GET_ALLOC(CURR_HDRP(block_p)) && GET_SIZE(CURR_HDRP(block_p)) >= size) {
-//			printf("\n\nfound block p : %p\n", block_p);
+
+			// If the block is exactly the same size as size, early return
+			if (GET_SIZE(CURR_HDRP(block_p)) == size || GET_SIZE(CURR_HDRP(block_p)) * 80 / 100 >= size) {
+				return block_p;
+			}
 
 			// If best_fit_p is NULL or the current block is smaller than the previous best fit block
 			if (best_fit_p == NULL || GET_SIZE(CURR_HDRP(block_p)) < best_fit_size) {
