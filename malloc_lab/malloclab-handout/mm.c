@@ -143,12 +143,13 @@ team_t team = {
 // Get the pointer which contians address of the previous free block
 #define PREV_FREEP(bp)        ((char *)(bp))
 
-// Get the address of the previous free block
-#define PREV_FREE_BP(bp)    ((char *)GETD((char *)(bp)))
-
 // Get the address of the next free block
 #define NEXT_FREE_BP(bp)    ((char *)GETD((char *)(bp) + DSIZE))
 
+// Get the address of the previous free block
+#define PREV_FREE_BP(bp)    ((char *)GETD((char *)(bp)))
+
+/* Global variables */
 
 /* heap_listp points to the prologue block */
 static void *heap_list_p = NULL;  // Pointer to the first block
@@ -178,10 +179,9 @@ static void *find_best_fit(size_t size);
 
 static void place(void *block_p, size_t size);
 
-static void link_next_free_block(void *curr_free_block_p, void *next_free_block_p);
+static void remove_from_free_list(void *curr_free_p);
 
-static void relink_prev_next_free_block(void *curr_free_block_p);
-
+static void push_free_block_to_list(void *curr_free_p);
 
 /*
  * mm_init - initialize the malloc package.
@@ -214,10 +214,11 @@ int mm_init(void) {
 	// Set heap_list_p to point to the prologue block, between prologue header and prologue footer
 	heap_list_p += (DSIZE);
 
-	// Extend the empty heap with a free block of CHUNKSIZE bytes
-	extend_heap(CHUNKSIZE);
+	// Extend heap for CHUNKSIZE
+//	if (!extend_heap(CHUNKSIZE))
+//		return (-1);
 
-	return 0;
+	return (0);
 }
 
 
@@ -226,13 +227,11 @@ int mm_init(void) {
  *     Always allocate a block whose size is a multiple of the alignment.
  */
 void *mm_malloc(size_t size) {
+
+	printf("malloc size : %d\n", size);
+
 	size_t new_size;
 	void *block_p;
-
-	// Initialize heap_list_p if it is NULL
-	if (heap_list_p == NULL) {
-		mm_init();
-	}
 
 	// If size is 0, return NULL
 	if (!size)
@@ -240,10 +239,9 @@ void *mm_malloc(size_t size) {
 
 	// Calculate new_size to include header and footer
 	// minimum size is 24 bytes
-	// - add DSIZE because the size of the block includes header and footer
+	// - add DSIZE because the size of the block includes headerx and footer
 	// - 2 * 8 byte payload : previous free block pointer and next free block pointer
 	new_size = MAX(ALIGN(size) + DSIZE, 3 * DSIZE);
-
 
 	// Search for best fit block
 	block_p = find_best_fit(new_size);
@@ -251,13 +249,19 @@ void *mm_malloc(size_t size) {
 	// If there is no enough size free block, extend heap
 	if (!block_p) {
 		block_p = extend_heap(MAX(new_size, CHUNKSIZE));
-
+		printf("extended");
 		if (!block_p)
 			return (NULL);
 	}
 
+	printf("place block_p, size : %p, %d\n", block_p, new_size);
+	printf("prev_freep of block_p : %p\n", PREV_FREEP(block_p));
+	printf ("next_freep of block_p : %p\n", NEXT_FREEP(block_p));
+
 	// If there is best fit block
 	place(block_p, new_size);
+
+	mm_check();
 
 	// Return the pointer to the payload of the allocated block
 	return (block_p);
@@ -343,26 +347,44 @@ int mm_check(void) {
 	// Check if every free block actually exists in the free list
 	// Check if heap_list_p points to valid address
 
+	// print heap start and end address
+	printf("heap start : %p, heap end : %p\n", mem_heap_lo(), mem_heap_hi());
+
 	void *block_p;
+	block_p = heap_list_p;
+	printf("heap_list_p : %p\n", heap_list_p);
 
 	// Check if ptr is valid
 	if (block_p < mem_heap_lo() || block_p > mem_heap_hi() || (size_t)block_p % 8 != 0)
-		return 0;
+		printf("heap_list_p is invalid\n");
 
-
-	printf("heap_list_p : %p\n", heap_list_p);
-	block_p = heap_list_p;
 
 	printf("all blocks\n");
 	printf("--------------------\n");
 	while (GET_SIZE(CURR_HDRP(block_p))) {
+		printf("###\n");
 		printf("block_p      : %p\n", block_p);
 		printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
 		printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
+		printf("prev p       : %p\n", PREV_BP(block_p));
+		printf("next p       : %p\n", NEXT_BP(block_p));
+		printf("###\n");
 		block_p = NEXT_BP(block_p);
 	}
 	printf("--------------------\n");
 
+	printf("free blocks\n");
+	printf("--------------------\n");
+	block_p = first_free_p;
+	while (block_p) {
+		printf("@@@\n");
+		printf("block_p      : %p\n", block_p);
+		printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
+		printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
+		printf("@@@\n");
+		block_p = NEXT_FREE_BP(block_p);
+	}
+	printf("--------------------\n");
 
 	return (1);
 }
@@ -372,9 +394,21 @@ int mm_check(void) {
  */
 static void *coalesce(void *block_p) {
 
+	// block_p is the pointer to the current block
+	// block_p is new free block pointer
+
+	void *next_block_p;
+	void *prev_block_p;
+
 	size_t prev_alloc;
 	size_t next_alloc;
 	size_t size;
+
+	// Get the pointer to the next block
+	next_block_p = NEXT_BP(block_p);
+
+	// Get the pointer to the previous block
+	prev_block_p = PREV_BP(block_p);
 
 	// Get the allocation bit of the previous block
 	prev_alloc = GET_ALLOC(PREV_FTRP(block_p));
@@ -385,56 +419,29 @@ static void *coalesce(void *block_p) {
 	// Get the size of the current block
 	size = GET_SIZE(CURR_HDRP(block_p));
 
+	printf("coal block_p : %p\n", block_p);
+	printf("next_block_p : %p\n", next_block_p);
+	printf("prev_block_p : %p\n", prev_block_p);
+
+	printf("prev_alloc : %d\n", prev_alloc);
+	printf("next_alloc : %d\n", next_alloc);
+	printf("size : %d\n", size);
+
 	// If the previous block and the next block are allocated
 	if (prev_alloc && next_alloc) {
+		// Do nothing
 
-		// Set the previous free block pointer of the current block to NULL
-		PUTD(PREV_FREEP(block_p), NULL);
-
-		// Set the next free block pointer of the current block to NULL
-		PUTD(NEXT_FREEP(block_p), NULL);
-
-		// Set the pointer to the first free block to the current block
-		if (first_free_p) {
-			PUTD(PREV_FREEP(first_free_p), block_p);
-			PUTD(NEXT_FREEP(block_p), first_free_p);
-		}
-		first_free_p = block_p;
 	}
 
 		// If the previous block is allocated and the next block is free
+		// coalesce the current block and the next block
 	else if (prev_alloc && !next_alloc) {
 
 		// Get the size of the next block
 		size += GET_SIZE(NEXT_HDRP(block_p));
 
-		// Relink the previous free block and the next free block of the next block
-		relink_prev_next_free_block(NEXT_BP(block_p));
-
-		// Set the previous free block pointer of the current block to NULL
-		PUTD(PREV_FREEP(block_p), NULL);
-
-
-		if (NEXT_BP(block_p) == first_free_p) {
-
-			PUTD(NEXT_FREEP(block_p), NEXT_FREE_BP(NEXT_BP(block_p)));
-
-			if (NEXT_FREE_BP(NEXT_BP(block_p))) {
-				PUTD(PREV_FREEP(NEXT_FREE_BP(NEXT_BP(block_p))), block_p);
-			}
-
-		}
-
-		else {
-			// Set the next free block pointer of the current block to NULL
-			PUTD(NEXT_FREEP(block_p), first_free_p);
-
-			// first_free_p is not NULL
-			PUTD(PREV_FREEP(first_free_p), block_p);
-
-
-		}
-
+		// Remove the next block from the free list
+		remove_from_free_list(next_block_p);
 
 		// Set the header of the current block to free
 		PUT(CURR_HDRP(block_p), PACK(size, 0));
@@ -442,16 +449,23 @@ static void *coalesce(void *block_p) {
 		// Set the footer of the current block to free
 		PUT(CURR_FTRP(block_p), PACK(size, 0));
 
+
 	}
 
 		// If the previous block is free and the next block is allocated
+		// coalesce the previous block and the current block
 	else if (!prev_alloc && next_alloc) {
+
+		printf("block_p : %p\n, prevblock_p : %p\n", block_p, prev_block_p);
 
 		// Get the size of the previous block
 		size += GET_SIZE(PREV_FTRP(block_p));
 
-		// Relink the previous free block and the next free block of the previous block
-		relink_prev_next_free_block(PREV_BP(block_p));
+		// Remove the previous block from the free list
+		remove_from_free_list(prev_block_p);
+
+		printf("mmcheck after remove\n");
+		mm_check();
 
 		// Set the header of the previous block to free
 		PUT(PREV_HDRP(block_p), PACK(size, 0));
@@ -461,26 +475,26 @@ static void *coalesce(void *block_p) {
 
 		// Set the pointer to the current block to the previous block
 		block_p = PREV_BP(block_p);
+
+
+		printf("mmcheck after set\n");
+		mm_check();
 	}
 
 		// If the previous block and the next block are free
 	else {
+
 		// Get the size of the previous block
 		size += GET_SIZE(PREV_FTRP(block_p));
 
 		// Get the size of the next block
 		size += GET_SIZE(NEXT_HDRP(block_p));
 
-		if (PREV_BP(block_p) != first_free_p && NEXT_BP(block_p) != first_free_p) {
-			// Relink the previous free block and the next free block of the previous block
-			relink_prev_next_free_block(PREV_BP(block_p));
+		// Remove the previous block from the free list
+		remove_from_free_list(prev_block_p);
 
-			// Relink the previous free block and the next free block of the next block
-			relink_prev_next_free_block(NEXT_BP(block_p));
-
-		} else if (PREV_BP(block_p) == first_free_p && NEXT_BP(block_p) !=
-
-
+		// Remove the next block from the free list
+		remove_from_free_list(next_block_p);
 
 		// Set the header of the previous block to free
 		PUT(PREV_HDRP(block_p), PACK(size, 0));
@@ -492,6 +506,20 @@ static void *coalesce(void *block_p) {
 		block_p = PREV_BP(block_p);
 	}
 
+
+	// Set the next free block pointer of the current block to NULL
+	PUTD(NEXT_FREEP(block_p), NULL);
+
+	// Set the previous free block pointer of the current block to NULL
+	PUTD(PREV_FREEP(block_p), NULL);
+
+	printf("coalesced block_p : %p\n", block_p);
+
+	// Push the current block to the free list
+	push_free_block_to_list(block_p);
+
+	mm_check();
+
 	return (block_p);
 }
 
@@ -499,13 +527,14 @@ static void *coalesce(void *block_p) {
  * extend_heap - Extend heap with free block and return its block pointer
  */
 static void *extend_heap(size_t size) {
+	printf("extend heap by size : %d\n", size);
+
 
 	// Pointer to the extended block
 	char *block_p;
 
 	// Calculate size to extend heap and extend heap
 	block_p = mem_sbrk(ALIGN(size) + DSIZE);
-
 
 	// If mem_sbrk fails, return NULL
 	if (block_p == (void *)(-1)) {
@@ -521,7 +550,11 @@ static void *extend_heap(size_t size) {
 	// Set epilogue header
 	PUT(NEXT_HDRP(block_p), PACK(0, 1));
 
-	// Coalesce if the previous block is free
+	printf("extended block : %p\n", block_p);
+	printf("prev p of extended : %p\n", PREV_BP(block_p));
+	printf("next p of extended : %p\n", NEXT_BP(block_p));
+
+	// Coalesce
 	block_p = coalesce(block_p);
 
 	// Return the pointer to the extended block
@@ -579,14 +612,24 @@ static void place(void *block_p, size_t size) {
 	block_size = GET_SIZE(CURR_HDRP(block_p));
 
 	// Get the pointer to the next free block
-	next_free_p = NEXT_FREEP(block_p);
+	next_free_p = NEXT_FREE_BP(block_p);
 
 	// Get the pointer to the previous free block
-	prev_free_p = PREV_FREEP(block_p);
+	prev_free_p = PREV_FREE_BP(block_p);
+
+	printf("next_free_p : %p, prev_free_p : %p\n", next_free_p, prev_free_p);
 
 	// If block size is bigger than size + 24
 	// Split the block
 	if (block_size >= size + 3 * DSIZE) {
+
+		// Set the header of the block to allocated
+		PUT(CURR_HDRP(block_p), PACK(size, 1));
+
+		// Set the footer of the block to allocated
+		PUT(CURR_FTRP(block_p), PACK(size, 1));
+
+		// Calculate the address of the remaining free block
 		remaining_block_p = NEXT_BP(block_p);
 
 		// Initialize the previous free block pointer of the remaining block to NULL
@@ -597,8 +640,8 @@ static void place(void *block_p, size_t size) {
 
 		// If the block is not the last free block
 		if (next_free_p) {
-			PUTD(PREV_FREEP(next_free_p), remaining_block_p);
 			PUTD(NEXT_FREEP(remaining_block_p), next_free_p);
+			PUTD(PREV_FREEP(next_free_p), remaining_block_p);
 		}
 
 		// If the block is not the first free block
@@ -607,23 +650,24 @@ static void place(void *block_p, size_t size) {
 			PUTD(NEXT_FREEP(prev_free_p), remaining_block_p);
 		}
 
-
-		// Set the header of the block to allocated
-		PUT(CURR_HDRP(block_p), PACK(size, 1));
-
-		// Set the footer of the block to allocated
-		PUT(CURR_FTRP(block_p), PACK(size, 1));
+		// If the block was the first free block
+		if (block_p == first_free_p) {
+			first_free_p = remaining_block_p;
+		}
 
 		// Set the header of the remaining free block
-		PUT(CURR_FTRP(remaining_block_p), PACK(block_size - size, 0));
+		PUT(CURR_HDRP(remaining_block_p), PACK(block_size - size, 0));
 
 		// Set the footer of the remaining free block
-		PUT(CURR_HDRP(remaining_block_p), PACK(block_size - size, 0));
+		PUT(CURR_FTRP(remaining_block_p), PACK(block_size - size, 0));
 
 	}
 		// If the block size is smaller than size + 24
 		// Use the whole block
 	else {
+
+		// Remove the block from the free list
+		remove_from_free_list(block_p);
 
 		// Set the header of the block to allocated
 		PUT(CURR_HDRP(block_p), PACK(block_size, 1));
@@ -631,64 +675,74 @@ static void place(void *block_p, size_t size) {
 		// Set the footer of the block to allocated
 		PUT(CURR_FTRP(block_p), PACK(block_size, 1));
 
-
-		// Remove the block from the free list
-		// If the block is the first free block
-		if (!next_free_p && !prev_free_p) {
-			first_free_p = NULL;
-
-		}
-			// If the block is the last free block
-		else if (!next_free_p) {
-			PUTD(PREV_FREEP(next_free_p), prev_free_p);
-
-		}
-			// If the block is the first free block
-		else if (!prev_free_p) {
-			PUTD(NEXT_FREEP(prev_free_p), next_free_p);
-
-		}
-			// If the block is in the middle of the free list
-		else {
-			PUTD(NEXT_FREEP(prev_free_p), next_free_p);
-			PUTD(PREV_FREEP(next_free_p), prev_free_p);
-		}
-
 	}
 }
 
-
-static void link_next_free_block(void *curr_free_block_p, void *next_free_block_p) {
-	// If the next free block exists
-	if (next_free_block_p) {
-		// Set the previous free block pointer of the next free block to the current free block
-		PUTD(PREV_FREEP(next_free_block_p), curr_free_block_p);
-	}
-
-	// Set the next free block pointer of the current free block to the next free block
-	PUTD(NEXT_FREEP(curr_free_block_p), next_free_block_p);
-}
-
-static void relink_prev_next_free_block(void *curr_free_block_p) {
-	void *prev_free_block_p;
-	void *next_free_block_p;
-
-	// Get the pointer to the previous free block
-	prev_free_block_p = PREV_FREE_BP(curr_free_block_p);
+static void remove_from_free_list(void *curr_free_p) {
+	void *next_free_p;
+	void *prev_free_p;
 
 	// Get the pointer to the next free block
-	next_free_block_p = NEXT_FREE_BP(curr_free_block_p);
+	next_free_p = NEXT_FREE_BP(curr_free_p);
 
-	// If the previous free block exists
-	if (prev_free_block_p) {
-		// Set the next free block pointer of the previous free block to the next free block
-		PUTD(NEXT_FREEP(prev_free_block_p), next_free_block_p);
+	// Get the pointer to the previous free block
+	prev_free_p = PREV_FREE_BP(curr_free_p);
+
+	// If the block was the only free block
+	if (!next_free_p && !prev_free_p) {
+
+		// Set the pointer to the first free block to NULL
+		first_free_p = NULL;
+
 	}
+		// If the block is the last free block
+	else if (!next_free_p) {
 
-	// If the next free block exists
-	if (next_free_block_p) {
-		// Set the previous free block pointer of the next free block to the previous free block
-		PUTD(PREV_FREEP(next_free_block_p), prev_free_block_p);
+		// Set the next free block pointer of the previous free block to NULL
+		PUTD(NEXT_FREEP(prev_free_p), NULL);
+
+	}
+		// If the block is the first free block
+	else if (!prev_free_p) {
+
+		// Set the previous free block pointer of the next free block to NULL
+		PUTD(PREV_FREEP(next_free_p), NULL);
+
+		// Set the pointer to the first free block to the next free block
+		first_free_p = next_free_p;
+
+	}
+		// If the block is in the middle of the free list
+	else {
+
+		// Connect next free block and previous free block
+		PUTD(NEXT_FREEP(prev_free_p), next_free_p);
+		PUTD(PREV_FREEP(next_free_p), prev_free_p);
+
 	}
 }
 
+static void push_free_block_to_list(void *curr_free_p) {
+
+	void *second_free_p;
+
+	// second_free_p points to the first free block
+	second_free_p = first_free_p;
+
+	// Set the pointer to the first free block to the current free block
+	first_free_p = curr_free_p;
+
+	// Set the previous free block pointer of the current free block to NULL
+	PUTD(PREV_FREEP(first_free_p), NULL);
+
+	// Set the next free block pointer of the current free block to the second free block
+	PUTD(NEXT_FREEP(first_free_p), second_free_p);
+
+	// If the second free block exists
+	if (second_free_p) {
+
+		// Set the previous free block pointer of the second free block to the current free block
+		PUTD(PREV_FREEP(second_free_p), first_free_p);
+
+	}
+}
