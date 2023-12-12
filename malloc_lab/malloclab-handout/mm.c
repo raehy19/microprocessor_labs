@@ -40,6 +40,17 @@
  *  Payload : 8 * n bytes (n >= 0)
  *  Footer : 4 bytes
  *
+ * Free List
+ * - Free blocks are linked in a doubly linked list
+ * - first_free_p points to the first free block
+ * - next_free_p points to the next free block
+ * - prev_free_p points to the previous free block
+ *
+ * mm_check
+ * - Check heap consistency
+ * - Now removed for performance
+ * - Call mm_check() to check heap consistency
+ *
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -228,8 +239,6 @@ int mm_init(void) {
  */
 void *mm_malloc(size_t size) {
 
-	printf("malloc size : %d\n", size);
-
 	size_t new_size;
 	void *block_p;
 
@@ -249,19 +258,12 @@ void *mm_malloc(size_t size) {
 	// If there is no enough size free block, extend heap
 	if (!block_p) {
 		block_p = extend_heap(MAX(new_size, CHUNKSIZE));
-		printf("extended");
 		if (!block_p)
 			return (NULL);
 	}
 
-	printf("place block_p, size : %p, %d\n", block_p, new_size);
-	printf("prev_freep of block_p : %p\n", PREV_FREEP(block_p));
-	printf ("next_freep of block_p : %p\n", NEXT_FREEP(block_p));
-
 	// If there is best fit block
 	place(block_p, new_size);
-
-	mm_check();
 
 	// Return the pointer to the payload of the allocated block
 	return (block_p);
@@ -343,50 +345,105 @@ void *mm_realloc(void *ptr, size_t size) {
 
 
 int mm_check(void) {
-	// Check if every adjacent free blocks are coalesced
-	// Check if every free block actually exists in the free list
-	// Check if heap_list_p points to valid address
-
-	// print heap start and end address
-	printf("heap start : %p, heap end : %p\n", mem_heap_lo(), mem_heap_hi());
-
 	void *block_p;
+	int is_valid = 1;
+
 	block_p = heap_list_p;
-	printf("heap_list_p : %p\n", heap_list_p);
 
-	// Check if ptr is valid
-	if (block_p < mem_heap_lo() || block_p > mem_heap_hi() || (size_t)block_p % 8 != 0)
+	// Check if heap_list_p points to valid address
+	if (block_p < mem_heap_lo() || block_p > mem_heap_hi() || (size_t)block_p % 8 != 0) {
 		printf("heap_list_p is invalid\n");
+		printf("heap_list_p : %p\n", heap_list_p);
+		printf("heap start : %p, heap end : %p\n", mem_heap_lo(), mem_heap_hi());
+	}
 
-
-	printf("all blocks\n");
-	printf("--------------------\n");
 	while (GET_SIZE(CURR_HDRP(block_p))) {
-		printf("###\n");
-		printf("block_p      : %p\n", block_p);
-		printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
-		printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
-		printf("prev p       : %p\n", PREV_BP(block_p));
-		printf("next p       : %p\n", NEXT_BP(block_p));
-		printf("###\n");
+
+		// Check if every adjacent free blocks are coalesced
+		if (!GET_ALLOC(CURR_HDRP(block_p)) && !GET_ALLOC(NEXT_HDRP(block_p))) {
+			printf("adjacent free blocks are not coalesced\n");
+			is_valid = 0;
+			break;
+		}
+
+		// Check if every free block actually exists in the free list
+		if (!GET_ALLOC(CURR_HDRP(block_p))) {
+			void *free_block_p;
+
+			free_block_p = first_free_p;
+
+			// Search for the free block in the free list
+			while (free_block_p) {
+				if (free_block_p == block_p) {
+					break;
+				}
+				free_block_p = NEXT_FREE_BP(free_block_p);
+			}
+
+			// If the free block does not exist in the free list
+			if (!free_block_p) {
+				printf("free block does not exist in the free list\n");
+				is_valid = 0;
+				break;
+			}
+		}
+
+		// Check if the size of the block is valid
+		if (GET_SIZE(CURR_HDRP(block_p)) != GET_SIZE(CURR_FTRP(block_p))) {
+			printf("block size is invalid\n");
+			is_valid = 0;
+			break;
+		}
+
 		block_p = NEXT_BP(block_p);
 	}
-	printf("--------------------\n");
 
-	printf("free blocks\n");
-	printf("--------------------\n");
+	// Check if every block in free list is free
 	block_p = first_free_p;
 	while (block_p) {
-		printf("@@@\n");
-		printf("block_p      : %p\n", block_p);
-		printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
-		printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
-		printf("@@@\n");
+		if (GET_ALLOC(CURR_HDRP(block_p))) {
+			printf("free block is not free\n");
+			is_valid = 0;
+			break;
+		}
 		block_p = NEXT_FREE_BP(block_p);
 	}
-	printf("--------------------\n");
 
-	return (1);
+
+	// print if there is an error
+	if (!is_valid) {
+
+		// Print all blocks
+		printf("all blocks\n");
+		printf("--------------------\n");
+		while (GET_SIZE(CURR_HDRP(block_p))) {
+			printf("###\n");
+			printf("block_p      : %p\n", block_p);
+			printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
+			printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
+			printf("prev p       : %p\n", PREV_BP(block_p));
+			printf("next p       : %p\n", NEXT_BP(block_p));
+			printf("###\n");
+			block_p = NEXT_BP(block_p);
+		}
+		printf("--------------------\n");
+
+		// Print free blocks
+		printf("free blocks\n");
+		printf("--------------------\n");
+		block_p = first_free_p;
+		while (block_p) {
+			printf("@@@\n");
+			printf("block_p      : %p\n", block_p);
+			printf("is allocated : %d\n", GET_ALLOC(CURR_HDRP(block_p)));
+			printf("size         : %d\n", GET_SIZE(CURR_HDRP(block_p)));
+			printf("@@@\n");
+			block_p = NEXT_FREE_BP(block_p);
+		}
+		printf("--------------------\n");
+	}
+
+	return (is_valid);
 }
 
 /*
@@ -419,14 +476,6 @@ static void *coalesce(void *block_p) {
 	// Get the size of the current block
 	size = GET_SIZE(CURR_HDRP(block_p));
 
-	printf("coal block_p : %p\n", block_p);
-	printf("next_block_p : %p\n", next_block_p);
-	printf("prev_block_p : %p\n", prev_block_p);
-
-	printf("prev_alloc : %d\n", prev_alloc);
-	printf("next_alloc : %d\n", next_alloc);
-	printf("size : %d\n", size);
-
 	// If the previous block and the next block are allocated
 	if (prev_alloc && next_alloc) {
 		// Do nothing
@@ -456,16 +505,11 @@ static void *coalesce(void *block_p) {
 		// coalesce the previous block and the current block
 	else if (!prev_alloc && next_alloc) {
 
-		printf("block_p : %p\n, prevblock_p : %p\n", block_p, prev_block_p);
-
 		// Get the size of the previous block
 		size += GET_SIZE(PREV_FTRP(block_p));
 
 		// Remove the previous block from the free list
 		remove_from_free_list(prev_block_p);
-
-		printf("mmcheck after remove\n");
-		mm_check();
 
 		// Set the header of the previous block to free
 		PUT(PREV_HDRP(block_p), PACK(size, 0));
@@ -476,9 +520,6 @@ static void *coalesce(void *block_p) {
 		// Set the pointer to the current block to the previous block
 		block_p = PREV_BP(block_p);
 
-
-		printf("mmcheck after set\n");
-		mm_check();
 	}
 
 		// If the previous block and the next block are free
@@ -513,12 +554,9 @@ static void *coalesce(void *block_p) {
 	// Set the previous free block pointer of the current block to NULL
 	PUTD(PREV_FREEP(block_p), NULL);
 
-	printf("coalesced block_p : %p\n", block_p);
-
 	// Push the current block to the free list
 	push_free_block_to_list(block_p);
 
-	mm_check();
 
 	return (block_p);
 }
@@ -527,8 +565,6 @@ static void *coalesce(void *block_p) {
  * extend_heap - Extend heap with free block and return its block pointer
  */
 static void *extend_heap(size_t size) {
-	printf("extend heap by size : %d\n", size);
-
 
 	// Pointer to the extended block
 	char *block_p;
@@ -549,10 +585,6 @@ static void *extend_heap(size_t size) {
 
 	// Set epilogue header
 	PUT(NEXT_HDRP(block_p), PACK(0, 1));
-
-	printf("extended block : %p\n", block_p);
-	printf("prev p of extended : %p\n", PREV_BP(block_p));
-	printf("next p of extended : %p\n", NEXT_BP(block_p));
 
 	// Coalesce
 	block_p = coalesce(block_p);
@@ -602,6 +634,10 @@ static void *find_best_fit(size_t size) {
 	return (best_fit_p);
 }
 
+
+/*
+ * place - Place the block into found free block
+ */
 static void place(void *block_p, size_t size) {
 	char *remaining_block_p;
 	size_t block_size;
@@ -616,8 +652,6 @@ static void place(void *block_p, size_t size) {
 
 	// Get the pointer to the previous free block
 	prev_free_p = PREV_FREE_BP(block_p);
-
-	printf("next_free_p : %p, prev_free_p : %p\n", next_free_p, prev_free_p);
 
 	// If block size is bigger than size + 24
 	// Split the block
@@ -678,6 +712,10 @@ static void place(void *block_p, size_t size) {
 	}
 }
 
+
+/*
+ * remove_from_free_list - Remove the free block from the free list
+ */
 static void remove_from_free_list(void *curr_free_p) {
 	void *next_free_p;
 	void *prev_free_p;
@@ -722,6 +760,9 @@ static void remove_from_free_list(void *curr_free_p) {
 	}
 }
 
+/*
+ * push_free_block_to_list - Push the free block to the free list
+ */
 static void push_free_block_to_list(void *curr_free_p) {
 
 	void *second_free_p;
