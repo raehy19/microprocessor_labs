@@ -1,0 +1,5 @@
+.cache/
+.brew/
+.ssh/
+.config/
+.local/
